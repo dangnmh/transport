@@ -2,10 +2,10 @@ package transport
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 )
@@ -16,26 +16,29 @@ type retryTransport struct {
 }
 
 type retryConfig struct {
+	RetryOnError   bool
 	OnStatus       []int
-	MaxTries       uint64        // Maximum number of retry attempts.
-	MaxElapsedTime time.Duration // Maximum total time for all retries.
+	MaxTries       uint64   // Maximum number of retry attempts.
+	WhiteListPaths []string // * mean all example GET|/v1/user/get
+	BlackListPaths []string
 }
 
-var DefaultRetryConfig = &retryConfig{
+var DefaultRetryConfig = retryConfig{
+	RetryOnError:   true,
 	OnStatus:       []int{429, 502, 503, 504},
 	MaxTries:       10,
-	MaxElapsedTime: 15 * time.Minute,
+	WhiteListPaths: []string{ConsCharStar},
 }
 
 func NewTransportRetry(tp http.RoundTripper, opts ...RetryOption) http.RoundTripper {
-	cfg := &*DefaultRetryConfig
+	cfg := DefaultRetryConfig
 	for _, opt := range opts {
-		opt(cfg)
+		opt(&cfg)
 	}
 
 	return &retryTransport{
 		tp:     tp,
-		config: cfg,
+		config: &cfg,
 	}
 }
 
@@ -46,13 +49,21 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	res, err := rt.tp.RoundTrip(cloneReq)
-	if err != nil || !rt.isRetryable(res.StatusCode) {
+	if !rt.validRetryPath(req) {
 		return res, err
 	}
 
-	bo := backoff.NewExponentialBackOff(backoff.WithMaxElapsedTime(rt.config.MaxElapsedTime))
+	if err != nil && !rt.config.RetryOnError {
+		return res, err
+	}
 
-	// var lastRes *http.Response
+	if res != nil && !slices.Contains(rt.config.OnStatus, res.StatusCode) {
+		return res, err
+	}
+	fmt.Println(rt.config.MaxTries,"222222222")
+
+	bo := backoff.NewExponentialBackOff()
+
 	res, err = backoff.RetryWithData(func() (*http.Response, error) {
 		cloneReq, err := cloneRequest(req)
 		if err != nil {
@@ -65,8 +76,28 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return res, err
 }
 
-func (rt *retryTransport) isRetryable(status int) bool {
-	return slices.Contains(rt.config.OnStatus, status)
+func (rt *retryTransport) validRetryPath(req *http.Request) bool {
+	if slices.Contains(rt.config.BlackListPaths, ConsCharStar) {
+		return false
+	}
+
+	method := req.Method
+	path := req.URL.Path
+	combine := fmt.Sprintf("%s%s%s", method, ConsCharVerticalBar, path)
+
+	if slices.Contains(rt.config.BlackListPaths, combine) {
+		return false
+	}
+
+	if slices.Contains(rt.config.WhiteListPaths, ConsCharStar) {
+		return true
+	}
+
+	if slices.Contains(rt.config.WhiteListPaths, combine) {
+		return true
+	}
+
+	return false
 }
 
 func cloneRequest(req *http.Request) (*http.Request, error) {

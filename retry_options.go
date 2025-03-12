@@ -1,8 +1,13 @@
 package transport
 
-import "time"
-
 type RetryOption func(*retryConfig) *retryConfig
+
+func RetryOptionOnError(enable bool) RetryOption {
+	return func(c *retryConfig) *retryConfig {
+		c.RetryOnError = enable
+		return c
+	}
+}
 
 func RetryOptionOnStatus(status []int) RetryOption {
 	return func(c *retryConfig) *retryConfig {
@@ -18,9 +23,18 @@ func RetryOptionMaxTries(max uint64) RetryOption {
 	}
 }
 
-func RetryOptionMaxElapsedTime(max time.Duration) RetryOption {
+// * mean all example GET|/v1/user/get
+func RetryOptionWhiteListPaths(paths []string) RetryOption {
 	return func(c *retryConfig) *retryConfig {
-		c.MaxElapsedTime = max
+		c.WhiteListPaths = paths
+		return c
+	}
+}
+
+// * mean all example GET|/v1/user/get
+func RetryOptionBlackListPaths(paths []string) RetryOption {
+	return func(c *retryConfig) *retryConfig {
+		c.BlackListPaths = paths
 		return c
 	}
 }
