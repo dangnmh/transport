@@ -18,6 +18,10 @@ func RetryOptionOnStatus(status []int) RetryOption {
 
 func RetryOptionMaxTries(max uint64) RetryOption {
 	return func(c *retryConfig) *retryConfig {
+		if max > 0 {
+			max -= 1
+		}
+		
 		c.MaxTries = max
 		return c
 	}

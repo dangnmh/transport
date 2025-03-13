@@ -28,15 +28,15 @@ type mockRoundTripper struct {
 }
 
 func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	fmt.Println("counter", m.attempts)
+	defer func() {
+		m.attempts += 1
+	}()
+
 	if m.attempts < len(m.errs) && m.errs[m.attempts] != nil {
-		m.attempts++
-		return nil, m.errs[m.attempts-1]
+		return nil, m.errs[m.attempts]
 	}
 	if m.attempts < len(m.responses) {
 		resp := m.responses[m.attempts]
-		fmt.Println(m.attempts, resp.StatusCode, "11111111111")
-		m.attempts++
 		return resp, nil
 	}
 	return nil, errors.New("unexpected request")
@@ -44,26 +44,25 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 func TestRetryTransport_Cases(t *testing.T) {
 	testCases := []*mockRoundTripper{
-		// noRetryOnError,
-		// successRetryOnError,
-		// noRetryOnSuccess,
-		// retryOnValidStatus,
-		// noRetryOnStatus,
-		// noRetryBlackListAll,
-		// noBlackList,
-		// notWhiteListRetry,
-		// successWhiteListRetry,
-		// noRetryCauseMissWhiteListRetry,
-		// noRetryCausWhiteListBlackListRetry,
+		noRetryOnError,
+		successRetryOnError,
+		noRetryOnSuccess,
+		retryOnValidStatus,
+		noRetryOnStatus,
+		noRetryBlackListAll,
+		noBlackList,
+		notWhiteListRetry,
+		successWhiteListRetry,
+		noRetryCauseMissWhiteListRetry,
+		noRetryCausWhiteListBlackListRetry,
 		successOnMaxRetry,
-		// failedOnMaxRetry,
+		failedOnMaxRetry,
 	}
 
 	for _, testCase := range testCases {
 		client := &http.Client{
 			Transport: NewTransportRetry(testCase, testCase.options...),
 		}
-
 		testName := testCase.name
 
 		req, err := http.NewRequest(testCase.method, testCase.url, bytes.NewReader(testCase.reqBody))
@@ -79,16 +78,16 @@ func TestRetryTransport_Cases(t *testing.T) {
 	}
 }
 
-var temporaryNetworkError = errors.New("temporary network error")
+var errTemporaryNetwork = errors.New("temporary network error")
 var defaultMethod = http.MethodGet
 var defaultDomain = "http://example.com"
 var defaultPath = "/v1/api"
-var defaultURL = defaultDomain + defaultPath
+var defaultURL = defaultDomain + defaultPath + "?search=abc&keyword=hhh#tag"
 
 var noRetryOnError = &mockRoundTripper{
 	name: "noRetryOnError",
 	errs: []error{
-		temporaryNetworkError,
+		errTemporaryNetwork,
 	},
 	responses: []*http.Response{
 		nil,
@@ -105,7 +104,7 @@ var noRetryOnError = &mockRoundTripper{
 var successRetryOnError = &mockRoundTripper{
 	name: "successRetryOnError",
 	errs: []error{
-		temporaryNetworkError,
+		errTemporaryNetwork,
 		nil,
 	},
 	responses: []*http.Response{
@@ -338,14 +337,14 @@ var successOnMaxRetry = &mockRoundTripper{
 			StatusCode: http.StatusOK,
 		},
 	},
-	expectedAttempts: 2,
+	expectedAttempts: 5,
 	expectedError:    false,
 	expectedResponse: true,
 	method:           defaultMethod,
 	url:              defaultURL,
 	reqBody:          []byte{},
 	options: []RetryOption{
-		RetryOptionMaxTries(4),
+		RetryOptionMaxTries(10),
 	},
 	expectedStatus: http.StatusOK,
 }

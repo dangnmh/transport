@@ -1,9 +1,8 @@
 package transport
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 
@@ -49,7 +48,7 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	res, err := rt.tp.RoundTrip(cloneReq)
-	if !rt.validRetryPath(req) {
+	if !rt.validRetryPath(req) || rt.config.MaxTries == 0 {
 		return res, err
 	}
 
@@ -57,23 +56,44 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return res, err
 	}
 
-	if res != nil && !slices.Contains(rt.config.OnStatus, res.StatusCode) {
+	if !rt.validRetryResStatus(res) {
 		return res, err
 	}
-	fmt.Println(rt.config.MaxTries,"222222222")
 
 	bo := backoff.NewExponentialBackOff()
 
+	var lastSuccessRes *http.Response
 	res, err = backoff.RetryWithData(func() (*http.Response, error) {
 		cloneReq, err := cloneRequest(req)
 		if err != nil {
 			return nil, err
 		}
 
-		return rt.tp.RoundTrip(cloneReq)
+		res, err := rt.tp.RoundTrip(cloneReq)
+		if err != nil {
+			return nil, err
+		}
+
+		lastSuccessRes = res
+		if rt.validRetryResStatus(res) {
+			return nil, errors.New("bad status")
+		}
+
+		return res, err
 	}, backoff.WithMaxRetries(bo, rt.config.MaxTries))
+	if err != nil && lastSuccessRes != nil {
+		return lastSuccessRes, nil
+	}
 
 	return res, err
+}
+
+func (rt *retryTransport) validRetryResStatus(res *http.Response) bool {
+	if res != nil && !slices.Contains(rt.config.OnStatus, res.StatusCode) {
+		return false
+	}
+
+	return true
 }
 
 func (rt *retryTransport) validRetryPath(req *http.Request) bool {
@@ -98,22 +118,4 @@ func (rt *retryTransport) validRetryPath(req *http.Request) bool {
 	}
 
 	return false
-}
-
-func cloneRequest(req *http.Request) (*http.Request, error) {
-	newReq := req.Clone(req.Context()) // Clone method copies headers and context
-
-	// If the request has a body, we need to copy it
-	if req.Body != nil && req.Body != http.NoBody {
-		var buf bytes.Buffer
-		_, err := io.Copy(&buf, req.Body) // Copy body content
-		if err != nil {
-			return nil, err
-		}
-
-		newReq.Body = io.NopCloser(bytes.NewReader(buf.Bytes())) // Reset body
-		req.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))    // Reset original body
-	}
-
-	return newReq, nil
 }
