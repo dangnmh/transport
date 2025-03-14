@@ -2,31 +2,27 @@ package transport
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
-	"slices"
 
 	"github.com/cenkalti/backoff/v4"
 )
 
 type retryTransport struct {
-	tp     http.RoundTripper
-	config *retryConfig
+	tp      http.RoundTripper
+	config  *retryConfig
+	matcher Matcher
 }
 
 type retryConfig struct {
-	RetryOnError   bool
-	OnStatus       []int
-	MaxTries       uint64   // Maximum number of retry attempts.
-	WhiteListPaths []string // * mean all example GET|/v1/user/get
-	BlackListPaths []string
+	RetryOnError bool
+	MaxTries     uint64 // Maximum number of retry attempts.
+	*MatcherConfig
 }
 
 var DefaultRetryConfig = retryConfig{
-	RetryOnError:   true,
-	OnStatus:       []int{429, 502, 503, 504},
-	MaxTries:       10,
-	WhiteListPaths: []string{ConsCharStar},
+	RetryOnError:  true,
+	MaxTries:      10,
+	MatcherConfig: &DefaultMatcherConfig,
 }
 
 func NewTransportRetry(tp http.RoundTripper, opts ...RetryOption) http.RoundTripper {
@@ -36,8 +32,9 @@ func NewTransportRetry(tp http.RoundTripper, opts ...RetryOption) http.RoundTrip
 	}
 
 	return &retryTransport{
-		tp:     tp,
-		config: &cfg,
+		tp:      tp,
+		config:  &cfg,
+		matcher: NewMatcher(*cfg.MatcherConfig),
 	}
 }
 
@@ -48,7 +45,7 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	res, err := rt.tp.RoundTrip(cloneReq)
-	if !rt.validRetryPath(req) || rt.config.MaxTries == 0 {
+	if rt.config.MaxTries == 0 {
 		return res, err
 	}
 
@@ -56,7 +53,7 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return res, err
 	}
 
-	if !rt.validRetryResStatus(res) {
+	if res != nil && !rt.matcher.ShouldDo(req, res.StatusCode) {
 		return res, err
 	}
 
@@ -75,7 +72,7 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 		lastSuccessRes = res
-		if rt.validRetryResStatus(res) {
+		if rt.matcher.ShouldDo(req, res.StatusCode) {
 			return nil, errors.New("bad status")
 		}
 
@@ -86,36 +83,4 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	return res, err
-}
-
-func (rt *retryTransport) validRetryResStatus(res *http.Response) bool {
-	if res != nil && !slices.Contains(rt.config.OnStatus, res.StatusCode) {
-		return false
-	}
-
-	return true
-}
-
-func (rt *retryTransport) validRetryPath(req *http.Request) bool {
-	if slices.Contains(rt.config.BlackListPaths, ConsCharStar) {
-		return false
-	}
-
-	method := req.Method
-	path := req.URL.Path
-	combine := fmt.Sprintf("%s%s%s", method, ConsCharVerticalBar, path)
-
-	if slices.Contains(rt.config.BlackListPaths, combine) {
-		return false
-	}
-
-	if slices.Contains(rt.config.WhiteListPaths, ConsCharStar) {
-		return true
-	}
-
-	if slices.Contains(rt.config.WhiteListPaths, combine) {
-		return true
-	}
-
-	return false
 }
