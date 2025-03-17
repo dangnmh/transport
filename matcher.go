@@ -19,6 +19,7 @@ var DefaultMatcherConfig = MatcherConfig{
 
 type Matcher interface {
 	Match(req *http.Request, statusCode int) bool
+	MatchPath(req *http.Request) bool
 }
 
 func NewMatcher(cfg MatcherConfig) Matcher {
@@ -30,6 +31,10 @@ func (m *MatcherConfig) Match(req *http.Request, statusCode int) bool {
 		return false
 	}
 
+	return m.MatchPath(req)
+}
+
+func (m *MatcherConfig) MatchPath(req *http.Request) bool {
 	if slices.Contains(m.BlackListPaths, ConsCharStar) {
 		return false
 	}

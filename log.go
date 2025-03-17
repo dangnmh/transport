@@ -18,7 +18,7 @@ type logTransport struct {
 }
 
 type logConfig struct {
-	*MatcherConfig
+	MatcherConfig
 	level               slog.Level
 	logHeaders          bool
 	logLatency          bool
@@ -35,7 +35,7 @@ type logConfig struct {
 var defaultLogger = slog.Default()
 
 var DefaultLogConfig = logConfig{
-	MatcherConfig:       &DefaultMatcherConfig,
+	MatcherConfig:       DefaultMatcherConfig,
 	level:               slog.LevelInfo,
 	logHeaders:          true,
 	logLatency:          true,
@@ -63,12 +63,16 @@ func NewTransportLog(tp http.RoundTripper, opts ...LogOption) http.RoundTripper 
 	return &logTransport{
 		tp:      tp,
 		config:  &cfg,
-		matcher: NewMatcher(*cfg.MatcherConfig),
+		matcher: NewMatcher(cfg.MatcherConfig),
 		logger:  cfg.logger,
 	}
 }
 
 func (lt *logTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !lt.matcher.MatchPath(req) {
+		return lt.tp.RoundTrip(req)
+	}
+
 	start := time.Now()
 	logField := lt.buildLogRequestFields(req)
 

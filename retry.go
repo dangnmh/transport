@@ -16,13 +16,13 @@ type retryTransport struct {
 type retryConfig struct {
 	RetryOnError bool
 	MaxTries     uint64 // Maximum number of retry attempts.
-	*MatcherConfig
+	MatcherConfig
 }
 
 var DefaultRetryConfig = retryConfig{
 	RetryOnError:  true,
 	MaxTries:      10,
-	MatcherConfig: &DefaultMatcherConfig,
+	MatcherConfig: DefaultMatcherConfig,
 }
 
 func NewTransportRetry(tp http.RoundTripper, opts ...RetryOption) http.RoundTripper {
@@ -34,11 +34,15 @@ func NewTransportRetry(tp http.RoundTripper, opts ...RetryOption) http.RoundTrip
 	return &retryTransport{
 		tp:      tp,
 		config:  &cfg,
-		matcher: NewMatcher(*cfg.MatcherConfig),
+		matcher: NewMatcher(cfg.MatcherConfig),
 	}
 }
 
 func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !rt.matcher.MatchPath(req) {
+		return rt.tp.RoundTrip(req)
+	}
+
 	cloneReq, err := cloneRequest(req)
 	if err != nil {
 		return nil, err

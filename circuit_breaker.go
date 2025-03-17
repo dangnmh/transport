@@ -17,13 +17,13 @@ type circuitBreakerTransport struct {
 }
 
 type circuitBreakerConfig struct {
-	*MatcherConfig
+	MatcherConfig
 	logger        *slog.Logger
-	breakerConfig *gobreaker.Settings
+	breakerConfig gobreaker.Settings
 }
 
 var DefaultCircuitBreakerConfig = circuitBreakerConfig{
-	MatcherConfig: &DefaultMatcherConfig,
+	MatcherConfig: DefaultMatcherConfig,
 	logger:        defaultLogger,
 }
 
@@ -37,18 +37,23 @@ func NewCircuitBreakerTransport(tp http.RoundTripper, opts ...CircuitBreakerOpti
 	return &circuitBreakerTransport{
 		tp:      tp,
 		logger:  cfg.logger,
-		breaker: gobreaker.NewCircuitBreaker[*http.Response](*cfg.breakerConfig),
+		breaker: gobreaker.NewCircuitBreaker[*http.Response](cfg.breakerConfig),
+		matcher: NewMatcher(cfg.MatcherConfig),
 	}
 }
 
 func (cbt *circuitBreakerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !cbt.matcher.MatchPath(req) {
+		return cbt.tp.RoundTrip(req)
+	}
+
 	result, err := cbt.breaker.Execute(func() (*http.Response, error) {
 		res, err := cbt.tp.RoundTrip(req)
 		if err != nil {
 			return nil, err
 		}
 
-		if res.StatusCode >= 500 { // Treat server errors as failures
+		if cbt.matcher.Match(req, res.StatusCode) {
 			return nil, errors.New("server error")
 		}
 

@@ -43,19 +43,20 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 func TestRetryTransport_Cases(t *testing.T) {
 	testCases := []*mockRoundTripper{
-		// noRetryOnError,
+		noRetryOnError,
+		zeroRetryConfig,
 		successRetryOnError,
-		// noRetryOnSuccess,
-		// retryOnValidStatus,
-		// noRetryOnStatus,
-		// noRetryBlackListAll,
-		// noBlackList,
-		// notWhiteListRetry,
-		// successWhiteListRetry,
-		// noRetryCauseMissWhiteListRetry,
-		// noRetryCausWhiteListBlackListRetry,
-		// successOnMaxRetry,
-		// failedOnMaxRetry,
+		noRetryOnSuccess,
+		retryOnValidStatus,
+		noRetryOnStatus,
+		noRetryBlackListAll,
+		noBlackList,
+		notWhiteListRetry,
+		successWhiteListRetry,
+		noRetryCauseMissWhiteListRetry,
+		noRetryCausWhiteListBlackListRetry,
+		successOnMaxRetry,
+		failedOnMaxRetry,
 	}
 
 	for _, testCase := range testCases {
@@ -98,6 +99,23 @@ var noRetryOnError = &mockRoundTripper{
 	url:              defaultURL,
 	reqBody:          []byte{},
 	options:          []RetryOption{RetryOptionOnError(false)},
+}
+
+var zeroRetryConfig = &mockRoundTripper{
+	name: "zeroRetryConfig",
+	errs: []error{
+		errTemporaryNetwork,
+	},
+	responses: []*http.Response{
+		nil,
+	},
+	expectedAttempts: 1,
+	expectedError:    true,
+	expectedResponse: false,
+	method:           defaultMethod,
+	url:              defaultURL,
+	reqBody:          []byte{},
+	options:          []RetryOption{RetryOptionMaxTries(0)},
 }
 
 var successRetryOnError = &mockRoundTripper{
@@ -180,8 +198,12 @@ var noRetryOnStatus = &mockRoundTripper{
 	method:           defaultMethod,
 	url:              defaultURL,
 	reqBody:          []byte{},
-	options:          []RetryOption{RetryOptionOnStatus([]int{})},
-	expectedStatus:   http.StatusServiceUnavailable,
+	options: []RetryOption{
+		RetryOptionMatcherConfig(MatcherConfig{
+			OnStatus: []int{},
+		}),
+	},
+	expectedStatus: http.StatusServiceUnavailable,
 }
 
 var noBlackList = &mockRoundTripper{
@@ -195,14 +217,18 @@ var noBlackList = &mockRoundTripper{
 			StatusCode: http.StatusOK,
 		},
 	},
-	expectedAttempts: 2,
+	expectedAttempts: 1,
 	expectedError:    false,
 	expectedResponse: true,
 	method:           defaultMethod,
 	url:              defaultURL,
 	reqBody:          []byte{},
-	options:          []RetryOption{RetryOptionBlackListPaths([]string{})},
-	expectedStatus:   http.StatusOK,
+	options: []RetryOption{
+		RetryOptionMatcherConfig(MatcherConfig{
+			BlackListPaths: []string{},
+		}),
+	},
+	expectedStatus: http.StatusServiceUnavailable,
 }
 
 var noRetryBlackListAll = &mockRoundTripper{
@@ -220,8 +246,12 @@ var noRetryBlackListAll = &mockRoundTripper{
 	method:           defaultMethod,
 	url:              defaultURL,
 	reqBody:          []byte{},
-	options:          []RetryOption{RetryOptionBlackListPaths([]string{ConsCharStar})},
-	expectedStatus:   http.StatusServiceUnavailable,
+	options: []RetryOption{
+		RetryOptionMatcherConfig(MatcherConfig{
+			BlackListPaths: []string{ConsCharStar},
+		}),
+	},
+	expectedStatus: http.StatusServiceUnavailable,
 }
 
 var notWhiteListRetry = &mockRoundTripper{
@@ -239,8 +269,12 @@ var notWhiteListRetry = &mockRoundTripper{
 	method:           defaultMethod,
 	url:              defaultURL,
 	reqBody:          []byte{},
-	options:          []RetryOption{RetryOptionWhiteListPaths([]string{})},
-	expectedStatus:   http.StatusServiceUnavailable,
+	options: []RetryOption{
+		RetryOptionMatcherConfig(MatcherConfig{
+			WhiteListPaths: []string{},
+		}),
+	},
+	expectedStatus: http.StatusServiceUnavailable,
 }
 
 var successWhiteListRetry = &mockRoundTripper{
@@ -261,8 +295,13 @@ var successWhiteListRetry = &mockRoundTripper{
 	method:           defaultMethod,
 	url:              defaultURL,
 	reqBody:          []byte{},
-	options:          []RetryOption{RetryOptionWhiteListPaths([]string{CombinePath(defaultMethod, defaultPath)})},
-	expectedStatus:   http.StatusOK,
+	options: []RetryOption{
+		RetryOptionMatcherConfig(MatcherConfig{
+			WhiteListPaths: []string{CombinePath(defaultMethod, defaultPath)},
+			OnStatus:       []int{http.StatusServiceUnavailable},
+		}),
+	},
+	expectedStatus: http.StatusOK,
 }
 
 var noRetryCauseMissWhiteListRetry = &mockRoundTripper{
@@ -283,8 +322,12 @@ var noRetryCauseMissWhiteListRetry = &mockRoundTripper{
 	method:           defaultMethod,
 	url:              defaultURL,
 	reqBody:          []byte{},
-	options:          []RetryOption{RetryOptionWhiteListPaths([]string{CombinePath(defaultMethod, defaultPath+"/invalid")})},
-	expectedStatus:   http.StatusServiceUnavailable,
+	options: []RetryOption{
+		RetryOptionMatcherConfig(MatcherConfig{
+			WhiteListPaths: []string{CombinePath(defaultMethod, defaultPath+"/invalid")},
+		}),
+	},
+	expectedStatus: http.StatusServiceUnavailable,
 }
 
 var noRetryCausWhiteListBlackListRetry = &mockRoundTripper{
@@ -306,8 +349,10 @@ var noRetryCausWhiteListBlackListRetry = &mockRoundTripper{
 	url:              defaultURL,
 	reqBody:          []byte{},
 	options: []RetryOption{
-		RetryOptionWhiteListPaths([]string{CombinePath(defaultMethod, defaultPath)}),
-		RetryOptionBlackListPaths([]string{CombinePath(defaultMethod, defaultPath)}),
+		RetryOptionMatcherConfig(MatcherConfig{
+			WhiteListPaths: []string{CombinePath(defaultMethod, defaultPath)},
+			BlackListPaths: []string{CombinePath(defaultMethod, defaultPath)},
+		}),
 	},
 	expectedStatus: http.StatusServiceUnavailable,
 }

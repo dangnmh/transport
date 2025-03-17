@@ -8,7 +8,7 @@ import (
 
 type CircuitBreakerOption func(*circuitBreakerConfig) *circuitBreakerConfig
 
-func CircuitBreakerOptionMatcherConfig(config *MatcherConfig) CircuitBreakerOption {
+func CircuitBreakerOptionMatcherConfig(config MatcherConfig) CircuitBreakerOption {
 	return func(c *circuitBreakerConfig) *circuitBreakerConfig {
 		c.MatcherConfig = config
 		return c
@@ -22,7 +22,7 @@ func CircuitBreakerOptionLogger(logger *slog.Logger) CircuitBreakerOption {
 	}
 }
 
-func CircuitBreakerOptionBreakerConfig(config *gobreaker.Settings) CircuitBreakerOption {
+func CircuitBreakerOptionBreakerConfig(config gobreaker.Settings) CircuitBreakerOption {
 	return func(c *circuitBreakerConfig) *circuitBreakerConfig {
 		c.breakerConfig = config
 		return c
