@@ -80,3 +80,10 @@ func LogOptionStatusLogLevels(statusLogLevels map[int]slog.Level) LogOption {
 		return c
 	}
 }
+
+func LogOptionMatcherConfig(config *MatcherConfig) LogOption {
+	return func(c *logConfig) *logConfig {
+		c.MatcherConfig = config
+		return c
+	}
+}

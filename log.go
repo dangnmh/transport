@@ -32,6 +32,8 @@ type logConfig struct {
 	logger              *slog.Logger
 }
 
+var defaultLogger = slog.Default()
+
 var DefaultLogConfig = logConfig{
 	MatcherConfig:       &DefaultMatcherConfig,
 	level:               slog.LevelInfo,
@@ -47,6 +49,7 @@ var DefaultLogConfig = logConfig{
 		400: slog.LevelWarn,
 		200: slog.LevelInfo,
 	},
+	logger: defaultLogger,
 }
 
 func NewTransportLog(tp http.RoundTripper, opts ...LogOption) http.RoundTripper {
@@ -61,6 +64,7 @@ func NewTransportLog(tp http.RoundTripper, opts ...LogOption) http.RoundTripper 
 		tp:      tp,
 		config:  &cfg,
 		matcher: NewMatcher(*cfg.MatcherConfig),
+		logger:  cfg.logger,
 	}
 }
 
