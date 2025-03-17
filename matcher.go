@@ -6,7 +6,7 @@ import (
 )
 
 type MatcherConfig struct {
-	OnStatus       []int
+	OnStatus       []int // Zero for all status
 	WhiteListPaths []string
 	BlackListPaths []string
 }
@@ -27,6 +27,10 @@ func NewMatcher(cfg MatcherConfig) Matcher {
 }
 
 func (m *MatcherConfig) Match(req *http.Request, statusCode int) bool {
+	if slices.Contains(m.OnStatus, NumberZero) {
+		return true
+	}
+
 	if !slices.Contains(m.OnStatus, statusCode) {
 		return false
 	}
