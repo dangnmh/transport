@@ -33,7 +33,7 @@ func TestMatcher_Cases(t *testing.T) {
 		url, err := url.Parse(test.url)
 		require.NoError(t, err, test.name)
 
-		value := matcher.ShouldDo(&http.Request{
+		value := matcher.Match(&http.Request{
 			Method: test.method,
 			URL:    url,
 		}, test.status)

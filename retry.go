@@ -53,7 +53,7 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return res, err
 	}
 
-	if res != nil && !rt.matcher.ShouldDo(req, res.StatusCode) {
+	if res != nil && !rt.matcher.Match(req, res.StatusCode) {
 		return res, err
 	}
 
@@ -72,7 +72,7 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 		lastSuccessRes = res
-		if rt.matcher.ShouldDo(req, res.StatusCode) {
+		if rt.matcher.Match(req, res.StatusCode) {
 			return nil, errors.New("bad status")
 		}
 

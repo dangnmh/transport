@@ -41,3 +41,12 @@ func MatchesPath(pattern, path string) bool {
 
 	return pattern == path
 }
+
+func StringLowers(items []string) []string {
+	ans := make([]string, len(items))
+	for idx, item := range items {
+		ans[idx] = strings.ToLower(item)
+	}
+
+	return ans
+}

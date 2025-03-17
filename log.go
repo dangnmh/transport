@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -18,27 +19,29 @@ type logTransport struct {
 
 type logConfig struct {
 	*MatcherConfig
-	level           slog.Level
-	logHeaders      bool
-	logLatency      bool
-	logReqBody      bool
-	logResBody      bool
-	logQueryParams  bool // Log query parameters separately
-	maxLogBodySize  int  // Max size for logging body 0 mean unlimit
-	redactSensitive bool // Redact sensitive headers like Authorization
-	statusLogLevels map[int]slog.Level
-	logger          *slog.Logger
+	level               slog.Level
+	logHeaders          bool
+	logLatency          bool
+	logReqBody          bool
+	logResBody          bool
+	logQueryParams      bool     // Log query parameters separately
+	maxLogBodySize      int      // Max size for logging body 0 mean unlimit
+	redactSensitive     bool     // Redact sensitive headers like Authorization
+	redactSensitiveKeys []string // Redact sensitive headers like Authorization
+	statusLogLevels     map[int]slog.Level
+	logger              *slog.Logger
 }
 
 var DefaultLogConfig = logConfig{
-	MatcherConfig:   &DefaultMatcherConfig,
-	level:           slog.LevelInfo,
-	logHeaders:      true,
-	logLatency:      true,
-	logReqBody:      true,
-	logResBody:      true,
-	maxLogBodySize:  0,
-	redactSensitive: true,
+	MatcherConfig:       &DefaultMatcherConfig,
+	level:               slog.LevelInfo,
+	logHeaders:          true,
+	logLatency:          true,
+	logReqBody:          true,
+	logResBody:          true,
+	maxLogBodySize:      0,
+	redactSensitive:     true,
+	redactSensitiveKeys: []string{"Authorization", "Cookie", "Set-Cookie"},
 	statusLogLevels: map[int]slog.Level{
 		500: slog.LevelError,
 		400: slog.LevelWarn,
@@ -52,6 +55,8 @@ func NewTransportLog(tp http.RoundTripper, opts ...LogOption) http.RoundTripper 
 		opt(&cfg)
 	}
 
+	cfg.redactSensitiveKeys = StringLowers(cfg.redactSensitiveKeys)
+
 	return &logTransport{
 		tp:      tp,
 		config:  &cfg,
@@ -61,22 +66,20 @@ func NewTransportLog(tp http.RoundTripper, opts ...LogOption) http.RoundTripper 
 
 func (lt *logTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	start := time.Now()
+	logField := lt.buildLogRequestFields(req)
+
 	res, err := lt.tp.RoundTrip(req)
 	if err != nil {
 		lt.logger.ErrorContext(req.Context(), "Request failed", slog.String("error", err.Error()))
 		return nil, err
 	}
-	if !lt.matcher.ShouldDo(req, res.StatusCode) {
+
+	if !lt.matcher.Match(req, res.StatusCode) {
 		return res, nil
 	}
 
-	ctx := req.Context()
-	lt.logger.LogAttrs(req.Context(), lt.getLogLevel(), "HTTP Request", fields...)
-
-	lt.logger.LogAttrs(ctx, lt.config.level, "HTTP Response", fields...)
-
-	lt.logRequest(req)
-	lt.logResponse(req.Context(), res, time.Since(start))
+	logField = append(logField, lt.buildLogResponseFields(res, time.Since(start))...)
+	lt.logger.LogAttrs(req.Context(), lt.getLogLevel(res.StatusCode), "HTTP Request", logField...)
 
 	return res, nil
 }
@@ -89,7 +92,7 @@ func (lt *logTransport) buildLogRequestFields(req *http.Request) []slog.Attr {
 	}
 
 	if lt.config.logHeaders {
-		fields = append(fields, slog.Any("headers", req.Header))
+		fields = append(fields, slog.Any("headers", lt.sanitizeHeaders(req.Header)))
 	}
 
 	if lt.config.logReqBody && req.Body != nil {
@@ -102,6 +105,7 @@ func (lt *logTransport) buildLogRequestFields(req *http.Request) []slog.Attr {
 		}
 	}
 
+	return fields
 }
 
 func (lt *logTransport) buildLogResponseFields(res *http.Response, latency time.Duration) []slog.Attr {
@@ -162,25 +166,14 @@ func (lt *logTransport) sanitizeHeaders(headers http.Header) map[string][]string
 		return headers
 	}
 
-	sensitiveKeys := []string{"Authorization", "Cookie", "Set-Cookie"}
+	sensitiveKeys := lt.config.redactSensitiveKeys
 	sanitized := make(map[string][]string)
 	for key, values := range headers {
-		if containsIgnoreCase(sensitiveKeys, key) {
+		if slices.Contains(sensitiveKeys, strings.ToLower(key)) {
 			sanitized[key] = []string{"[REDACTED]"}
 		} else {
 			sanitized[key] = values
 		}
 	}
 	return sanitized
-}
-
-// containsIgnoreCase checks if a slice contains a string (case insensitive)
-func containsIgnoreCase(slice []string, item string) bool {
-	itemLower := strings.ToLower(item)
-	for _, s := range slice {
-		if strings.ToLower(s) == itemLower {
-			return true
-		}
-	}
-	return false
 }

@@ -59,3 +59,24 @@ func LogOptionLogger(logger *slog.Logger) LogOption {
 		return c
 	}
 }
+
+func LogOptionRedactSensitive(enable bool) LogOption {
+	return func(c *logConfig) *logConfig {
+		c.redactSensitive = enable
+		return c
+	}
+}
+
+func LogOptionRedactSensitiveKeys(keys []string) LogOption {
+	return func(c *logConfig) *logConfig {
+		c.redactSensitiveKeys = keys
+		return c
+	}
+}
+
+func LogOptionStatusLogLevels(statusLogLevels map[int]slog.Level) LogOption {
+	return func(c *logConfig) *logConfig {
+		c.statusLogLevels = statusLogLevels
+		return c
+	}
+}

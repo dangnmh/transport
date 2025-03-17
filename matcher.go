@@ -18,14 +18,14 @@ var DefaultMatcherConfig = MatcherConfig{
 }
 
 type Matcher interface {
-	ShouldDo(req *http.Request, statusCode int) bool
+	Match(req *http.Request, statusCode int) bool
 }
 
 func NewMatcher(cfg MatcherConfig) Matcher {
 	return &cfg
 }
 
-func (m *MatcherConfig) ShouldDo(req *http.Request, statusCode int) bool {
+func (m *MatcherConfig) Match(req *http.Request, statusCode int) bool {
 	if !slices.Contains(m.OnStatus, statusCode) {
 		return false
 	}
