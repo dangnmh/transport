@@ -71,7 +71,3 @@ client := &http.Client{
 | **Logging** | `WithLogLevel(level slog.Level)` | Set log level (Info, Warn, Error) |
 | **Circuit Breaker** | `WithBreakerSettings(settings gobreaker.Settings)` | Custom circuit breaker settings |
 
-## License
-
-This project is licensed under the MIT License.
-
