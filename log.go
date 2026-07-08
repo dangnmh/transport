@@ -107,9 +107,9 @@ func (lt *logTransport) buildLogRequestFields(req *http.Request) []slog.Attr {
 		body, _ := io.ReadAll(req.Body)
 		req.Body = io.NopCloser(bytes.NewBuffer(body))
 		if lt.config.maxLogBodySize != 0 && len(body) > lt.config.maxLogBodySize {
-			fields = append(fields, slog.String("body", string(body[:lt.config.maxLogBodySize])+"..."))
+			fields = append(fields, slog.String("req_body", string(body[:lt.config.maxLogBodySize])+"..."))
 		} else {
-			fields = append(fields, slog.String("body", string(body)))
+			fields = append(fields, slog.String("req_body", string(body)))
 		}
 	}
 
@@ -128,9 +128,9 @@ func (lt *logTransport) buildLogResponseFields(res *http.Response, latency time.
 		body, _ := io.ReadAll(res.Body)
 		res.Body = io.NopCloser(bytes.NewBuffer(body))
 		if lt.config.maxLogBodySize != 0 && len(body) > lt.config.maxLogBodySize {
-			fields = append(fields, slog.String("body", string(body[:lt.config.maxLogBodySize])+"..."))
+			fields = append(fields, slog.String("res_body", string(body[:lt.config.maxLogBodySize])+"..."))
 		} else {
-			fields = append(fields, slog.String("body", string(body)))
+			fields = append(fields, slog.String("res_body", string(body)))
 		}
 	}
 
